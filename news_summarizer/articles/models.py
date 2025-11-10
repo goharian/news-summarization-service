@@ -1,3 +1,21 @@
+"""
+Database models.
+"""
 from django.db import models
 
-# Create your models here.
+
+class Article(models.Model):
+    """Article object."""
+    id = models.AutoField(primary_key=True)
+    title = models.CharField(max_length=250)
+    content = models.TextField(null=True, blank=True)
+    url = models.URLField(max_length=2000)
+    published_date = models.DateTimeField()
+    source = models.CharField(max_length=255)
+
+
+    class Meta:
+        ordering = ["-published_date"]
+
+    def __str__(self):
+        return self.title
