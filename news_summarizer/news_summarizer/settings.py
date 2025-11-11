@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -145,6 +146,8 @@ CACHES = {
     }
 }
 
-NEWS_API_KEY = '6d9e1673c0744188997b2a417e2d1ee3'
+NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 NEWS_API_URL = 'https://newsapi.org/v2/everything'
 NEWS_API_QUERY = 'Technology'
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
