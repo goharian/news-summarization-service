@@ -13,13 +13,11 @@ class Command(BaseCommand):
         try:
             articles_count = fetch_and_store_articles()
             
-            # Print success
             self.stdout.write(
                 self.style.SUCCESS(f'✅ Success! {articles_count} new articles were saved.')
             )
             
         except Exception as e:
-            # Print error
             logger.error(f"❌ Error while running the article fetching task: {e}")
             self.stdout.write(
                 self.style.ERROR(f'❌ Error while running the article fetching task: {e}')
