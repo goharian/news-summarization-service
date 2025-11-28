@@ -24,7 +24,7 @@ class ArticleViewsTest(TestCase):
 
         # Patch the function imported in the views module
         with mock.patch(
-            "news_summarizer.articles.views.get_article_summary_with_caching",
+            "articles.views.get_article_summary_with_caching",
             return_value=("View summary", True)
         ):
             client = self.client
