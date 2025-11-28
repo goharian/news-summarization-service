@@ -1,0 +1,122 @@
+import sys
+import types
+from django.core.cache import caches, cache
+from unittest import mock
+from django.test import TestCase, override_settings
+
+from news_summarizer.articles import chatgpt_service
+
+
+
+class ChatGPTServiceTests(TestCase):
+	"""
+	Tests for the ChatGPT-based article summarization service.
+	"""
+	def test_summarize_returns_mock_when_no_api_key(self):
+		"""
+		Ensure function falls back to mock summary when OPENAI_API_KEY is missing.
+		"""
+		with override_settings(OPENAI_API_KEY=None):
+			summary = chatgpt_service.summarize_article_with_chatgpt(
+				title="Test Title",
+				content="Some content goes here."
+			)
+
+		self.assertIn("**Mock Summary:**", summary)
+
+	def test_summarize_uses_openai_client_and_returns_text(self):
+		"""
+		Test that the summarize function uses the OpenAI client when API key is present
+		and returns the expected summary text.
+		"""
+		fake_module = types.ModuleType("openai")
+
+		class FakeChatCompletions:
+			"""
+			Fake chat completions class to simulate OpenAI responses.
+			"""
+			def create(self, *args, **kwargs):
+				"""
+				Simulate a response from OpenAI's chat completion.
+				:return: A fake response object with a summary.
+				"""
+				class Message:
+					"""
+					Fake message class to hold the summary text.
+					"""
+					content = "This is a concise summary."
+				class Choice:
+					"""
+					Fake choice class to hold a message.
+					"""
+					message = Message()
+				class Response:
+					"""
+					Fake response class to hold choices.
+					"""
+					choices = [Choice()]
+				return Response()
+
+		class FakeClient:
+			"""
+			Fake OpenAI client class.
+			"""
+			def __init__(self, api_key=None):
+				self.chat = types.SimpleNamespace(completions=FakeChatCompletions())
+		fake_module.OpenAI = FakeClient
+		fake_module.APIError = Exception
+
+		# Inject fake module into sys.modules so the function import finds it
+		with mock.patch.dict(sys.modules, {"openai": fake_module}):
+			with override_settings(OPENAI_API_KEY="sk-test"):
+				summary = chatgpt_service.summarize_article_with_chatgpt(
+					title="Tech News",
+					content="Lots of interesting content."
+				)
+
+		self.assertEqual(summary, "This is a concise summary.")
+
+	def test_get_article_summary_with_caching_uses_cache(self):
+		"""
+		Test that get_article_summary_with_caching stores and retrieves summaries from cache.
+		"""		
+		# Set up a test cache
+		test_caches = {
+			"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+			"summaries": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+		}
+
+		with override_settings(CACHES=test_caches):
+			# reload caches to pick up override_settings
+			cache._connections = {}
+			# point the module SUMMARY_CACHE to the test summaries cache
+			chatgpt_service.SUMMARY_CACHE = caches["summaries"]
+
+			# patch the summarizer to return a known value
+			with mock.patch(
+				"news_summarizer.articles.chatgpt_service.summarize_article_with_chatgpt",
+				return_value="Cached summary"
+			):
+				# First call - should not be from cache
+				summary1, from_cache1 = chatgpt_service.get_article_summary_with_caching(
+            	"Title A", "Content X"
+				)
+				self.assertFalse(from_cache1)
+				self.assertEqual(summary1, "Cached summary")
+
+				# Second call - should be from cache
+				summary2, from_cache2 = chatgpt_service.get_article_summary_with_caching(
+            		"Title A", "Content X"
+				)
+				self.assertTrue(from_cache2)
+				self.assertEqual(summary2, "Cached summary")
+				
+				# Third call - different content, should not be from cache
+				summary3, from_cache3 = chatgpt_service.get_article_summary_with_caching(
+            		"Title A", "Content Y is different"
+        		)
+				self.assertFalse(from_cache3)
+				self.assertEqual(summary3, "Cached summary")
+
+				# Ensure the summarization function was called only twice
+				mock.patch.multiple.get_mock_calls.count(mock.call('summarize_article_with_chatgpt', ...)) == 2
